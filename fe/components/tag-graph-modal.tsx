@@ -16,7 +16,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import dynamic from 'next/dynamic'
 import { DataAccess } from 'connector-userid-ts'
 import logger from "@/lib/logger"
@@ -30,7 +30,8 @@ interface TagGraphModalProps {
   tagColor: string
   tagDescription: string
   deviceId: string
-  sensorIds: string[]
+  sensorIds: string[] // Can now contain either strings or come from objects with structure [{"sensorName": "sensorID"}]
+  sensorNames?: string[] // Optional array of sensor names corresponding to sensorIds
   endTime: string // ISO date string
   userId: string
 }
@@ -76,6 +77,7 @@ export function TagGraphModal({
   tagDescription,
   deviceId,
   sensorIds,
+  sensorNames,
   endTime,
   userId,
 }: TagGraphModalProps) {
@@ -286,60 +288,71 @@ export function TagGraphModal({
               <span>{error}</span>
             </div>
           ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                {sensorIds.map((sensorId) => (
-                  <TabsTrigger key={sensorId} value={sensorId}>
-                    Sensor {sensorId}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {sensorIds.map((sensorId) => (
-                <TabsContent key={sensorId} value={sensorId}>
-                  <div className="h-[300px] w-full">
-                    {sensorData[sensorId]?.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={sensorData[sensorId]} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis 
-                            dataKey="time" 
-                            stroke="#666"
-                            tick={{ fontSize: 12 }}
-                          />
-                          <YAxis 
-                            stroke="#666"
-                            tick={{ fontSize: 12 }}
-                            domain={['auto', 'auto']}
-                            tickFormatter={(value) => `${value.toFixed(1)}`}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'white',
-                              border: '1px solid #e0e0e0',
-                              borderRadius: '4px',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                            }}
-                            formatter={(value: number) => [`${value.toFixed(2)}`, 'Value']}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="value"
-                            stroke={tagColor}
-                            strokeWidth={2}
-                            dot={{ fill: tagColor, strokeWidth: 2 }}
-                            activeDot={{ r: 6, fill: tagColor }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-500">
-                        No data available for this sensor
-                      </div>
-                    )}
+            <div className="w-full">
+              <div className="mb-4">
+                <Select value={activeTab} onValueChange={setActiveTab}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a sensor">
+                      {(() => {
+                        const index = sensorIds.findIndex(id => id === activeTab);
+                        return (sensorNames && sensorNames[index]) 
+                          ? sensorNames[index] 
+                          : `Sensor ${activeTab}`;
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sensorIds.map((sensorId, index) => (
+                      <SelectItem key={sensorId} value={sensorId}>
+                        {sensorNames && sensorNames[index] ? sensorNames[index] : `Sensor ${sensorId}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="h-[300px] w-full">
+                {sensorData[activeTab]?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sensorData[activeTab]} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis 
+                        dataKey="time" 
+                        stroke="#666"
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        stroke="#666"
+                        tick={{ fontSize: 12 }}
+                        domain={['auto', 'auto']}
+                        tickFormatter={(value) => `${value.toFixed(1)}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e0e0e0',
+                          borderRadius: '4px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                        }}
+                        formatter={(value: number) => [`${value.toFixed(2)}`, 'Value']}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke={tagColor}
+                        strokeWidth={2}
+                        dot={{ fill: tagColor, strokeWidth: 2 }}
+                        activeDot={{ r: 6, fill: tagColor }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-gray-500">
+                    No data available for this sensor
                   </div>
-                </TabsContent>
-              ))}
-            </Tabs>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="bg-blue-50 p-4 rounded-lg">

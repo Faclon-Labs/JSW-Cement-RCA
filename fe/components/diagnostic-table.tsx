@@ -69,7 +69,7 @@ export function DiagnosticTable({
   userId,
 }: DiagnosticTableProps) {
   const [selectedRows, setSelectedRows] = useState<string[]>([])
-  const [expandedRows, setExpandedRows] = useState<string[]>([])
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [showParameterModal, setShowParameterModal] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<any>(null)
   const [selectedParameter, setSelectedParameter] = useState<any>(null)
@@ -79,13 +79,14 @@ export function DiagnosticTable({
     description: string;
     deviceId: string;
     sensorIds: string[];
+    sensorNames?: string[];
     endTime: string;
     userId: string;
   } | null>(null)
   const [showTagModal, setShowTagModal] = useState(false)
 
   const toggleExpandRow = useCallback((id: string) => {
-    setExpandedRows((prev) => (prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]))
+    setExpandedRow((prev) => (prev === id ? null : id))
   }, [])
 
   const toggleRow = useCallback(
@@ -184,13 +185,31 @@ export function DiagnosticTable({
     }
   }
 
-  const handleTagClick = (tag: string, description: string, deviceId: string, sensorIds: string[], endTime: string) => {
+  const handleTagClick = (tag: string, description: string, deviceId: string, sensorIds: Array<{ [key: string]: string }>, endTime: string) => {
     // Use a default userId or extract it from asset data if available
     const userId = "66792886ef26fb850db806c5"  // This is the same userId we saw in the terminal logs
     
+    // Extract just the sensor IDs and names from the objects
+    const extractedSensorIds: string[] = [];
+    const extractedSensorNames: string[] = [];
+    
+    // Type-safe approach to iterate over the sensor objects
+    if (sensorIds && sensorIds.length > 0) {
+      sensorIds.forEach((sensor) => {
+        if (sensor) {
+          const sensorName = Object.keys(sensor)[0] || '';
+          const sensorId = sensor[sensorName] || '';
+          if (sensorId) {
+            extractedSensorIds.push(sensorId);
+            extractedSensorNames.push(sensorName);
+          }
+        }
+      });
+    }
+    
     // Ensure we have at least some sample sensor IDs if none are provided
-    const useSensorIds = sensorIds && sensorIds.length > 0 
-      ? sensorIds 
+    const useSensorIds = extractedSensorIds && extractedSensorIds.length > 0 
+      ? extractedSensorIds 
       : ["temp_sensor", "pressure_sensor", "vibration_sensor", "speed_sensor"];
       
     // Ensure we have a valid device ID
@@ -203,7 +222,8 @@ export function DiagnosticTable({
       tag, 
       description, 
       deviceId: useDeviceId, 
-      sensorIds: useSensorIds, 
+      sensorIds: useSensorIds,
+      sensorNames: extractedSensorNames,
       endTime: useEndTime, 
       userId 
     });
@@ -271,20 +291,20 @@ export function DiagnosticTable({
                 <TableCell>
                   <div className="flex justify-end">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleExpandRow(asset.id)}>
-                      <ChevronDown className={`h-5 w-5 text-gray-700 transition-transform ${expandedRows.includes(asset.id) ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`h-5 w-5 text-gray-700 transition-transform ${expandedRow === asset.id ? 'rotate-180' : ''}`} />
                     </Button>
                   </div>
                 </TableCell>
               </TableRow>
-              {expandedRows.includes(asset.id) && (
+              {expandedRow === asset.id && (
                 <TableRow>
                   <TableCell colSpan={6} className="p-0">
-                    <div className="bg-[#fffbf2] border border-[#ffecb5] rounded-md p-4">
+                    <div className="bg-white border border-[#ffecb5] rounded-md p-4">
                       <h3 className="text-black font-bold flex items-center gap-2 mb-4 text-base">
                         <AlertTriangle className="h-5 w-5 text-[#e5a635]" />
                         Faults Found & Analysis
                       </h3>
-                      <div className="bg-[#fff8e1] border border-[#ffe082] rounded p-3">
+                      <div className="bg-white border border-[#ffe082] rounded p-3">
                         <h4 className="font-bold text-black mb-1 text-base">Detected Issue:</h4>
                         <p className="text-base text-black mb-4">{faultAnalysis.detected_issue || 'No issue detected'}</p>
                         <h4 className="font-bold text-black mb-2 text-base">DETAILED ANALYSIS POINTS:</h4>
@@ -292,7 +312,7 @@ export function DiagnosticTable({
                           {Object.values(faultAnalysis.detailed_analysis_points || {}).map((point: any, idx: number) => {
                             // Extract device ID and sensor IDs from the point data
                             const deviceId = point.dev_id || '';
-                            const sensorIds = point.sensor_id || [];
+                            const sensorIds = point.sensor_id || []; // This is now an array of objects
                             const endTime = asset.rawData?.invocationTime || new Date().toISOString();
                             const isClickable = deviceId && sensorIds.length > 0;
                             
@@ -303,12 +323,18 @@ export function DiagnosticTable({
                               isClickable
                             });
 
+                            // Get sensor names for display (the keys)
+                            const sensorNames = sensorIds.map(sensor => {
+                              const keys = Object.keys(sensor);
+                              return keys.length > 0 ? keys[0] : 'Unknown';
+                            }).join(', ');
+
                             return (
                               <li key={idx} className="flex items-start gap-2 text-base text-black">
                                 {isClickable ? (
                                   <button
                                     className={
-                                      `rounded-full px-3 py-1 text-xs font-semibold mr-2 inline-block align-middle cursor-pointer hover:opacity-90 transition-opacity shadow-sm border border-white/30 hover:shadow-md transform hover:translate-y-[-1px] ` +
+                                      `rounded-full px-3 py-1 text-xs font-semibold mr-2 inline-block align-middle cursor-pointer transition-colors shadow-sm border border-white/30 hover:bg-white hover:text-black hover:shadow-md transform hover:translate-y-[-1px] ` +
                                       (point.tag?.toLowerCase() === 'critical'
                                         ? 'bg-[#e53935] text-white'
                                         : point.tag?.toLowerCase() === 'high'
@@ -320,7 +346,7 @@ export function DiagnosticTable({
                                         : 'bg-[#e0e7ef] text-black')
                                     }
                                     onClick={() => handleTagClick(point.tag, point.rca, deviceId, sensorIds, endTime)}
-                                    title={`View data for ${sensorIds.join(', ')}`}
+                                    title={`View data for ${sensorNames}`}
                                   >
                                     {point.tag?.charAt(0).toUpperCase() + point.tag?.slice(1)}
                                   </button>
@@ -415,6 +441,7 @@ export function DiagnosticTable({
           tagDescription={selectedTag.description}
           deviceId={selectedTag.deviceId}
           sensorIds={selectedTag.sensorIds}
+          sensorNames={selectedTag.sensorNames}
           endTime={selectedTag.endTime}
           userId={selectedTag.userId}
         />
